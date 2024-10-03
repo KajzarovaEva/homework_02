@@ -1,0 +1,94 @@
+<a href="https://colab.research.google.com/github/simecek/dspracticum2024/blob/main/lesson02/FashionMNIST_Dense.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+Let's build a simple neural network to classify images from the FashionMNIST dataset.
+
+**1. Import Libraries**
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torchvision import datasets, transforms
+*Checking for GPU Availability*
+
+This code checks if a CUDA-enabled GPU is available and sets the `device` accordingly. If no GPU is available, it defaults to the CPU.
+# Check if GPU is available
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using device: {device}')
+**2. Data Preparation**
+# Define a transform to convert images to tensors
+transform = transforms.ToTensor()
+
+# Download and load the training data
+train_set = datasets.FashionMNIST(root='./data', train=True, download=True, transform=transform)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=256, shuffle=True)
+# batch_size - nejaka mocnina dvojky, kolik tech dat nacteme, neco velkeho ale ne prilis
+# shuffle - u trenikovych dat to na zacatku promichame
+
+# Download and load the test data
+test_set = datasets.FashionMNIST(root='./data', train=False, download=True, transform=transform)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=256, shuffle=False)
+**3. Neural Network Model**
+class DenseNet(nn.Module):
+    def __init__(self): # co se s tou siti ma na zacatku stat, aby tam ty site byly zalozeny, proto definujeme pocet neuronu
+        super(DenseNet, self).__init__()
+        self.flatten = nn.Flatten() # prvni vrstva, ctvercova/maticova data rozdahne do vektoru
+        self.fc1 = nn.Linear(28 * 28, 512) #  kolik cisel je na vstupu a kolik na vystupu, provede se linearni kombinace vstupnich na vystupni
+        # s tou 128 si muzes hrat
+        self.fc2 = nn.Linear(512, 256)
+        # muzes pridat
+        # self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(256, 128) 
+
+    def forward(self, x): # tady definuju, jak to bude probihat; 
+        x = self.flatten(x) 
+        x = F.relu(self.fc1(x)) # relu je ta nelinearni vec viz prvni prednaska¨
+        x = F.relu(self.fc2(x))
+        logits = self.fc3(x)
+        return logits
+
+model = DenseNet().to(device) # timto to prekopirujeme na GPU
+model
+**4. Loss & Optimizer**
+criterion = nn.CrossEntropyLoss() # uvnitr uz je vse, co potrebujes
+optimizer = optim.SGD(model.parameters(), lr=0.108)
+**5. Training loop**
+for epoch in range(5):  # Train for 5 epochs, kazdy obrazek to uvidi 5x
+    running_loss = 0.0
+    for images, labels in train_loader:
+        # Move images and labels to the device
+        images = images.to(device) # taky to musime hodit na GPU
+        labels = labels.to(device)
+
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        # Backward pass and optimize
+        loss.backward()
+        optimizer.step() # udela nam ten jeden krok, kdy odecitame gradient
+
+        running_loss += loss.item() # do celkove ztraty pricteme tu aktualni
+
+    print(f'Epoch [{epoch+1}/5], Loss: {running_loss / len(train_loader):.4f}')
+**6. Evaluation on the test set**
+correct = 0
+total = 0
+with torch.no_grad():  # Disable gradient calculation for evaluation
+    for images, labels in test_loader:
+        # Move images and labels to the device
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+print(f'Accuracy: {100 * correct / total:.2f}%')
+
+
+ 
+
+
