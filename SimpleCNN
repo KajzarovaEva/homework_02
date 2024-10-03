@@ -1,0 +1,90 @@
+<a href="https://colab.research.google.com/github/simecek/dspracticum2024/blob/main/lesson02/FashionMNIST_SimpleCNN.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+Let's build a simple neural network to classify images from the FashionMNIST dataset.
+
+**1. Import Libraries**
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torchvision import datasets, transforms
+*Checking for GPU Availability*
+
+This code checks if a CUDA-enabled GPU is available and sets the `device` accordingly. If no GPU is available, it defaults to the CPU.
+# Check if GPU is available
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using device: {device}')
+**2. Data Preparation**
+# Define a transform to convert images to tensors
+transform = transforms.ToTensor()
+
+# Download and load the training data
+train_set = datasets.FashionMNIST(root='./data', train=True, download=True, transform=transform)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=256, shuffle=True)
+
+# Download and load the test data
+test_set = datasets.FashionMNIST(root='./data', train=False, download=True, transform=transform)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=256, shuffle=False)
+**3. Neural Network Model**
+class SimpleCNN(nn.Module):
+    def __init__(self):
+        super(SimpleCNN, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3) # prvni konvolucni vrstvou se dostnameme na rozmer 26x26
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3) # druhou konvolucni vrstvou se dostnameme na rozmer 24x24
+        self.flat = nn.Flatten()
+        self.fc1 = nn.Linear(in_features=24*24*64, out_features=128) # 24 protoze bereme kernel_size = 3, tj. vlevo a vpravo / nahore a dole se 2 radky/sloupce "ztrati"
+        self.drop = nn.Dropout(0.25)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.flat(x)
+        x = F.relu(self.fc1(x))
+        x = self.drop(x)
+        x = self.fc2(x)
+        return x
+
+model = SimpleCNN().to(device)
+model
+**4. Loss & Optimizer**
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(model.parameters(), lr=0.105)
+**5. Training loop**
+for epoch in range(5):  # Train for 5 epochs
+    running_loss = 0.0
+    for images, labels in train_loader:
+        # Move images and labels to the device
+        images = images.to(device)
+        labels = labels.to(device)
+
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        # Backward pass and optimize
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+
+    print(f'Epoch [{epoch+1}/5], Loss: {running_loss / len(train_loader):.4f}')
+**6. Evaluation on the test set**
+correct = 0
+total = 0
+with torch.no_grad():  # Disable gradient calculation for evaluation
+    for images, labels in test_loader:
+        # Move images and labels to the device
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+print(f'Accuracy: {100 * correct / total:.2f}%')
+
+
